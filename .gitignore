@@ -1,0 +1,16 @@
+# Godot
+.godot/
+
+# Importaciones (si prefieres que cada desarrollador las regenere)
+.import/
+
+# Archivos temporales
+*.tmp
+*.log
+
+# Exportaciones
+export_presets.cfg
+
+# Archivos del sistema
+.DS_Store
+Thumbs.db

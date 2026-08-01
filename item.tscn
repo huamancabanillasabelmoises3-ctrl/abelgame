@@ -1,0 +1,33 @@
+[gd_scene format=3 uid="uid://b1h61lj0cu27q"]
+
+[ext_resource type="Script" uid="uid://vngu3eva1x1h" path="res://bread.gd" id="1_tnite"]
+[ext_resource type="Script" uid="uid://cegfq8h60vmf4" path="res://itemdata.gd" id="2_ttk8k"]
+
+[sub_resource type="PhysicsMaterial" id="PhysicsMaterial_g7b7a"]
+
+[sub_resource type="Resource" id="Resource_ttk8k"]
+script = ExtResource("2_ttk8k")
+id = &"gm:bread"
+name = "Bread"
+color_name = Color(1, 1, 1, 1)
+type = 1
+durability = 12
+max_durability = 12
+metadata/_custom_type_script = "uid://cegfq8h60vmf4"
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_g7b7a"]
+
+[sub_resource type="BoxMesh" id="BoxMesh_g7b7a"]
+
+[node name="Bread" type="RigidBody3D" unique_id=1563024196]
+physics_material_override = SubResource("PhysicsMaterial_g7b7a")
+script = ExtResource("1_tnite")
+itemdata = SubResource("Resource_ttk8k")
+max_cantity = 16
+cantity = 16
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=1236636670]
+shape = SubResource("BoxShape3D_g7b7a")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="." unique_id=606601199]
+mesh = SubResource("BoxMesh_g7b7a")
