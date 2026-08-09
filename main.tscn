@@ -14,12 +14,14 @@
 [ext_resource type="Texture2D" uid="uid://de38kw3i5250m" path="res://heart.svg" id="6_074og"]
 [ext_resource type="Script" uid="uid://crd113gs834v4" path="res://inventory.gd" id="7_5vw27"]
 [ext_resource type="PackedScene" uid="uid://tcoelb75l1h4" path="res://item_slot.tscn" id="7_272bh"]
+[ext_resource type="Script" uid="uid://cptnimgv2j773" path="res://oher.gd" id="8_qsp4k"]
 [ext_resource type="Script" uid="uid://ebc8tiphesn0" path="res://lightorf.gd" id="9_dg77c"]
 [ext_resource type="Script" uid="uid://b3ecl8qclis03" path="res://cube.gd" id="9_vivmo"]
 [ext_resource type="Texture2D" uid="uid://djrupg8gsy1t7" path="res://grass.jpg" id="9_ycdy4"]
 [ext_resource type="Shader" uid="uid://cg3rvgvrysr46" path="res://fire.gdshader" id="10_w48qg"]
 [ext_resource type="Texture2D" uid="uid://cfrhqxpgn3u2n" path="res://fire.png" id="11_vivmo"]
 [ext_resource type="Script" uid="uid://ce7pimjpcoq5p" path="res://cube_i.gd" id="11_yaehf"]
+[ext_resource type="Texture2D" uid="uid://cknak682lrwcl" path="res://icon.svg" id="14_xuqvo"]
 [ext_resource type="Script" uid="uid://dx0xlyd7u17oa" path="res://mode.gd" id="18_82xsv"]
 [ext_resource type="FontFile" uid="uid://5sifksvtiqem" path="res://ttf/JetBrainsMono-Regular.ttf" id="22_0odxb"]
 [ext_resource type="FontFile" uid="uid://bxo2bjilpfy1r" path="res://ttf/JetBrainsMono-Bold.ttf" id="23_lswn8"]
@@ -226,19 +228,12 @@ size = Vector3(100, 100, 100)
 
 [sub_resource type="SphereShape3D" id="SphereShape3D_cegan"]
 
-[sub_resource type="ShaderMaterial" id="ShaderMaterial_074og"]
-render_priority = 0
-shader = ExtResource("3_efxa6")
-shader_parameter/smstep = 0.5
-shader_parameter/stepv = 0.25
-shader_parameter/albedo = Color(3.2321248, 0, 0, 1)
-shader_parameter/max_l = 0.5
-shader_parameter/normal_multiplier = 0.0
-shader_parameter/uv1_scale = Vector3(1, 1, 1)
-shader_parameter/uv1_offset = Vector3(0, 0, 0)
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_xuqvo"]
+albedo_color = Color(1, 0, 0, 1)
+albedo_texture = ExtResource("14_xuqvo")
 
 [sub_resource type="SphereMesh" id="SphereMesh_82xsv"]
-material = SubResource("ShaderMaterial_074og")
+material = SubResource("StandardMaterial3D_xuqvo")
 
 [sub_resource type="Curve" id="Curve_dg77c"]
 _data = [Vector2(0, 0.8880713), 0.0, 2.4918034, 0, 0, Vector2(0.21654853, 1), 0.0, 0.0, 0, 0, Vector2(1, 0), -0.09288096, 0.0, 0, 0]
@@ -362,6 +357,29 @@ shape = SubResource("CapsuleShape3D_kq58d")
 [node name="Soul" type="MeshInstance3D" parent="World3D/Abel" unique_id=710200893]
 mesh = SubResource("QuadMesh_g7b7a")
 
+[node name="Player" type="CharacterBody3D" parent="World3D" unique_id=1128942714 groups=["HitBall"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2, -4.3144174)
+collision_mask = 3
+wall_min_slide_angle = 0.7853982
+floor_block_on_wall = false
+script = ExtResource("8_qsp4k")
+mode = 1
+
+[node name="Mesh" type="MeshInstance3D" parent="World3D/Player" unique_id=1359006635]
+material_overlay = SubResource("ShaderMaterial_w48qg")
+mesh = SubResource("CapsuleMesh_7dm0k")
+
+[node name="Eyes" type="MeshInstance3D" parent="World3D/Player/Mesh" unique_id=662114706]
+transform = Transform3D(0.68559736, 0, 0, 0, -4.3711385e-08, -0.49026865, 0, 0.99999994, -2.1430322e-08, 0, 0.5, -0.30260384)
+material_overlay = SubResource("ShaderMaterial_dg77c")
+mesh = SubResource("SphereMesh_yaehf")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="World3D/Player" unique_id=1617784864]
+shape = SubResource("CapsuleShape3D_kq58d")
+
+[node name="Soul" type="MeshInstance3D" parent="World3D/Player" unique_id=1776660746]
+mesh = SubResource("QuadMesh_g7b7a")
+
 [node name="StaticBody3D2" type="StaticBody3D" parent="World3D" unique_id=881353677]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.1046288, 4.4326353)
 collision_layer = 2
@@ -371,7 +389,7 @@ collision_mask = 3
 transform = Transform3D(0.99999994, 0, 0, 0, 0.99999994, 0, 0, 0, 1, 0, 0, 0)
 shape = SubResource("BoxShape3D_1bvp3")
 
-[node name="MultiMeshInstance3D" type="MeshInstance3D" parent="World3D/StaticBody3D2" unique_id=893266187]
+[node name="M" type="MeshInstance3D" parent="World3D/StaticBody3D2" unique_id=893266187]
 mesh = SubResource("BoxMesh_lquwl")
 
 [node name="StaticBody3D3" type="StaticBody3D" parent="World3D" unique_id=143384362]
@@ -383,7 +401,7 @@ collision_mask = 3
 transform = Transform3D(0.99999994, 0, 0, 0, 0.99999994, 0, 0, 0, 1, 0, 0, 0)
 shape = SubResource("BoxShape3D_1bvp3")
 
-[node name="MultiMeshInstance3D" type="MeshInstance3D" parent="World3D/StaticBody3D3" unique_id=1250823062]
+[node name="M" type="MeshInstance3D" parent="World3D/StaticBody3D3" unique_id=1250823062]
 mesh = SubResource("BoxMesh_lquwl")
 
 [node name="StaticBody3D5" type="StaticBody3D" parent="World3D" unique_id=1381431485]
@@ -395,7 +413,7 @@ collision_mask = 3
 transform = Transform3D(0.99999994, 0, 0, 0, 0.99999994, 0, 0, 0, 1, 0, 0, 0)
 shape = SubResource("BoxShape3D_1bvp3")
 
-[node name="MultiMeshInstance3D" type="MeshInstance3D" parent="World3D/StaticBody3D5" unique_id=763122695]
+[node name="M" type="MeshInstance3D" parent="World3D/StaticBody3D5" unique_id=763122695]
 mesh = SubResource("BoxMesh_lquwl")
 
 [node name="Aim" type="Node3D" parent="World3D" unique_id=2072936141]
@@ -429,10 +447,10 @@ collision_mask = 3
 [node name="C" type="CollisionShape3D" parent="World3D/Floor" unique_id=1718251344]
 shape = SubResource("BoxShape3D_g7b7a")
 
-[node name="MeshInstance3D" type="MeshInstance3D" parent="World3D/Floor" unique_id=314482045]
+[node name="M" type="MeshInstance3D" parent="World3D/Floor" unique_id=314482045]
 mesh = SubResource("BoxMesh_hqkgv")
 
-[node name="Cube10" type="RigidBody3D" parent="World3D" unique_id=434001974]
+[node name="Ball" type="RigidBody3D" parent="World3D" unique_id=434001974]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5.220902, 4.5735874, -0.7929332)
 collision_layer = 2
 collision_mask = 3
@@ -442,13 +460,13 @@ contact_monitor = true
 max_contacts_reported = 5
 script = ExtResource("9_vivmo")
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="World3D/Cube10" unique_id=1504145654]
+[node name="CollisionShape3D" type="CollisionShape3D" parent="World3D/Ball" unique_id=1504145654]
 shape = SubResource("SphereShape3D_cegan")
 
-[node name="MeshInstance3D" type="MeshInstance3D" parent="World3D/Cube10" unique_id=2045837231]
+[node name="MeshInstance3D" type="MeshInstance3D" parent="World3D/Ball" unique_id=2045837231]
 mesh = SubResource("SphereMesh_82xsv")
 
-[node name="Interactable" type="Node" parent="World3D/Cube10" unique_id=1701126711]
+[node name="Interactable" type="Node" parent="World3D/Ball" unique_id=1701126711]
 script = ExtResource("11_yaehf")
 
 [node name="Bonfire" type="Node3D" parent="World3D" unique_id=807748097]
@@ -573,7 +591,7 @@ anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 offset_right = -1400.0
-offset_bottom = -760.0
+offset_bottom = -738.0
 grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 1
@@ -590,7 +608,6 @@ offset_right = -5.0
 offset_bottom = -59.0
 grow_horizontal = 2
 grow_vertical = 2
-mouse_filter = 1
 theme_override_fonts/normal_font = ExtResource("22_0odxb")
 theme_override_fonts/bold_font = ExtResource("23_lswn8")
 theme_override_fonts/bold_italics_font = ExtResource("24_a6jrf")
@@ -621,10 +638,9 @@ grow_vertical = 0
 theme_override_fonts/font = ExtResource("22_0odxb")
 theme_override_font_sizes/font_size = 32
 placeholder_text = "Write your command..."
-max_length = 132
 script = ExtResource("26_lswn8")
 
 [connection signal="output" from="ConsoleManager" to="CanvasLayer/ConsolePanel/ConsoleText" method="_on_console_manager_output"]
-[connection signal="input_event" from="World3D/Cube10" to="World3D/Cube10" method="_on_input_event"]
+[connection signal="input_event" from="World3D/Ball" to="World3D/Ball" method="_on_input_event"]
 [connection signal="text_change_rejected" from="CanvasLayer/ConsolePanel/ConsoleEntry" to="CanvasLayer/ConsolePanel/ConsoleText" method="_on_console_entry_text_change_rejected"]
 [connection signal="text_submitted" from="CanvasLayer/ConsolePanel/ConsoleEntry" to="CanvasLayer/ConsolePanel/ConsoleText" method="_on_console_entry_text_submitted"]

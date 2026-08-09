@@ -14,10 +14,10 @@ enum SoulMode {
 @onready var aim: Node3D = $"../Aim"
 @export var mode: SoulMode = SoulMode.NORMAL
 
-const SPEED := 8.0
-const JUMP_VELOCITY := 12.0
+var SPEED := 8.0
+var JUMP_VELOCITY := 12.0
 const MASS := 2.0
-const ROTATION_SPEED := 0.4
+var ROTATION_SPEED := 0.4
 
 var old_mode: int = SoulMode.NORMAL
 
