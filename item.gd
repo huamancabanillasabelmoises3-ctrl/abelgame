@@ -25,10 +25,11 @@ func use_action() -> void:
 		action_on()
 
 func set_data(key : String, val : Variant) -> void:
-	itemdata[key] = val
+	if key in itemdata:
+		itemdata[key] = val
 
 func get_data(key : String) -> Variant:
-	return itemdata[key]
+	return itemdata.get(key)
 
 func _update_item() -> void:
 	if itemdata.durability <= 0 and not itemdata.unbreakable:

@@ -2,21 +2,20 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://de38kw3i5250m"
-path.etc2="res://.godot/imported/Heart.svg-52fa47222c53341d2b783580e360b6f5.etc2.ctex"
+uid="uid://dlklsrst5jbju"
+path="res://.godot/imported/itemdata_icon.svg-dcabe638b319a5f48c31ad0e4f6eccac.ctex"
 metadata={
-"imported_formats": ["etc2_astc"],
-"vram_texture": true
+"vram_texture": false
 }
 
 [deps]
 
-source_file="res://Heart.svg"
-dest_files=["res://.godot/imported/Heart.svg-52fa47222c53341d2b783580e360b6f5.etc2.ctex"]
+source_file="res://itemdata_icon.svg"
+dest_files=["res://.godot/imported/itemdata_icon.svg-dcabe638b319a5f48c31ad0e4f6eccac.ctex"]
 
 [params]
 
-compress/mode=2
+compress/mode=0
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0
@@ -24,7 +23,7 @@ compress/rdo_quality_loss=0.0
 compress/hdr_compression=1
 compress/normal_map=0
 compress/channel_pack=0
-mipmaps/generate=true
+mipmaps/generate=false
 mipmaps/limit=-1
 roughness/mode=0
 roughness/src_normal=""
@@ -38,7 +37,7 @@ process/normal_map_invert_y=false
 process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=0
-detect_3d/compress_to=0
-svg/scale=4.0
+detect_3d/compress_to=1
+svg/scale=1.0
 editor/scale_with_editor_scale=false
 editor/convert_colors_with_editor_theme=false

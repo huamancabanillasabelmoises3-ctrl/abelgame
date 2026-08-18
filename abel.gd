@@ -7,7 +7,8 @@ enum SoulMode {
 	ANALYSIS
 }
 
-@onready var soul: MeshInstance3D = $"Soul"
+var soul_mesh : MeshInstance3D
+@export var soul: Soul
 @onready var front: ColorRect = $"../../CanvasLayer/Front"
 @onready var mesh: MeshInstance3D = $"Mesh"
 @onready var mesh2: MeshInstance3D = $"Mesh/Eyes"
@@ -21,6 +22,9 @@ var ROTATION_SPEED := 0.4
 
 var old_mode: int = SoulMode.NORMAL
 
+func _ready() -> void:
+	soul_mesh = soul.get_child(0)
+
 func _physics_process(delta: float) -> void:
 	_apply_gravity(delta)
 	_handle_jump()
@@ -32,7 +36,7 @@ func _display(old, new) -> void:
 	if old == new:
 		return
 	
-	var matsoul : ShaderMaterial = soul.mesh.surface_get_material(0)
+	var matsoul : ShaderMaterial = soul_mesh.mesh.surface_get_material(0)
 	var mat : ShaderMaterial = mesh.mesh.surface_get_material(0)
 	var mat2 : ShaderMaterial = mesh2.mesh.surface_get_material(0)
 	

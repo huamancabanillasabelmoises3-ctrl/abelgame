@@ -1,578 +1,1043 @@
+@icon("res://consolemanager.svg")
 extends Node
 class_name ConsoleManager
 
-
+## Clase para gestionar una consola con comandos y control del motor.
+## Se recomienda usar execute() y conectar output para obtener resultados.
 signal output(out: String)
 
-@onready var node_route: Node = self
-var route_stack: Array = []
-var resource_path: String = ""
-var route: Object = self
+## RouteFileManager encargado de resolver rutas externas a ConsoleManager.
+## Debe exponer una función resolve_reference(text: String) -> Variant.
+@export var route_file_manager: RouteFileManager
+
+## Variables internas de la consola.
+@export var variables: Dictionary = {}
+
+## Último resultado válido producido por un comando.
+## Se puede utilizar mediante @.
 var last_value: Variant = null
-var variables: Dictionary = {}
+
+## Contexto temporal utilizado por `at`.
+## No representa una ruta permanente.
+var context_stack: Array[Variant] = []
 
 
-func set_route(new_route: Object) -> void:
-	route = new_route
+class TCommandCall:
+	var t_name: String
+	var t_args: Array
+
+	func _init(
+		_t_name: String = "",
+		_t_args: Array = []
+	) -> void:
+		t_name = _t_name
+		t_args = _t_args
 
 
-func console_output(value: Variant) -> void:
-	output.emit(str(value))
+class NoResult:
+	pass
 
 
-func resolve_route(target: String) -> Object:
-	target = target.strip_edges()
+class ConsoleContext:
+	var t_last: Variant
+	var t_current: Variant
+	var t_variables: Dictionary
 
-	if target == "self":
-		return route
-
-	if variables.has(target):
-		if variables[target] is Object:
-			return variables[target]
-
-	if route is Object:
-		var route_node := route as Object
-		var local = route_node.get_node_or_null(target)
-
-		if local != null:
-			return local
-
-	return get_node_or_null(target)
+	func _init(
+		_t_last: Variant,
+		_t_current: Variant,
+		_t_variables: Dictionary
+	) -> void:
+		t_last = _t_last
+		t_current = _t_current
+		t_variables = _t_variables
 
 
-func _has_property(obj: Object, property_name: String) -> bool:
-	for p in obj.get_property_list():
-		if p.has("name") and str(p["name"]) == property_name:
+func console_output(t_value: Variant) -> void:
+	output.emit(str(t_value))
+
+
+func _current_context() -> Variant:
+	if context_stack.is_empty():
+		return self
+
+	return context_stack.back()
+
+
+func _push_context(t_value: Variant) -> void:
+	context_stack.append(t_value)
+
+
+func _pop_context() -> bool:
+	if context_stack.is_empty():
+		return false
+
+	context_stack.pop_back()
+	return true
+
+
+func _strip_surrounding_quotes(t_text: String) -> String:
+	t_text = t_text.strip_edges()
+
+	if (
+		t_text.begins_with("\"")
+		and t_text.ends_with("\"")
+		and t_text.length() >= 2
+	):
+		return t_text.substr(1, t_text.length() - 2)
+
+	return t_text
+
+
+func _has_property(
+	t_object: Object,
+	t_property_name: String
+) -> bool:
+	for t_property in t_object.get_property_list():
+		if (
+			t_property.has("name")
+			and str(t_property["name"]) == t_property_name
+		):
 			return true
 
 	return false
 
-func _push_route_state() -> void:
-	route_stack.append({
-		"route": route,
-		"node_route": node_route,
-		"resource_path": resource_path
-	})
 
+func _get_member(
+	t_container: Variant,
+	t_member: String
+) -> Variant:
+	if t_member == "self":
+		return t_container
 
-func _pop_route_state() -> bool:
-	if route_stack.is_empty():
-		return false
+	if t_container is Dictionary:
+		var t_dict: Dictionary = t_container
 
-	var state: Dictionary = route_stack.pop_back()
-
-	route = state.get("route", self)
-	node_route = state.get("node_route", self)
-	resource_path = str(state.get("resource_path", ""))
-
-	return true
-
-
-func _strip_surrounding_quotes(text: String) -> String:
-	text = text.strip_edges()
-
-	if text.begins_with("\"") and text.ends_with("\"") and text.length() >= 2:
-		return text.substr(1, text.length() - 2)
-
-	return text
-
-
-func _get_member(container: Variant, member: String) -> Variant:
-	if member == "self":
-		return container
-
-	if container is Dictionary:
-		if not container.has(member):
-			return NoResult.new()
-		return container[member]
-
-	if container is Array:
-		if not member.is_valid_int():
+		if not t_dict.has(t_member):
 			return NoResult.new()
 
-		var idx := int(member)
-		var arr: Array = container
+		return t_dict[t_member]
 
-		if idx < 0 or idx >= arr.size():
+	if t_container is Array:
+		if not t_member.is_valid_int():
 			return NoResult.new()
 
-		return arr[idx]
+		var t_index := int(t_member)
+		var t_array: Array = t_container
 
-	if container is Object:
-		var obj: Object = container
-
-		if not _has_property(obj, member):
+		if t_index < 0 or t_index >= t_array.size():
 			return NoResult.new()
 
-		return obj.get(member)
+		return t_array[t_index]
+
+	if t_container is Object:
+		var t_object: Object = t_container
+
+		if not _has_property(t_object, t_member):
+			return NoResult.new()
+
+		return t_object.get(t_member)
 
 	return NoResult.new()
 
 
-func _resolve_property_chain(base: Variant, chain: String) -> Variant:
-	var current: Variant = base
-
-	for part in chain.split("."):
-		part = part.strip_edges()
-
-		if part.is_empty():
-			continue
-
-		if part == "@":
-			current = last_value
-			continue
-
-		if part == "~":
-			current = route
-			continue
-
-		current = _get_member(current, part)
-
-		if current is NoResult:
-			return current
-
-	return current
-
-
-func _resolve_reference(text: String) -> Variant:
-	var direct := resolve_route(text)
-
-	if direct != null:
-		return direct
-
-	if text.find(".") != -1:
-		var chained = _resolve_property_chain(route, text)
-
-		if not (chained is NoResult):
-			return chained
-
-	return null
-
-
-func _resolve_property_parent(base: Variant, chain: String) -> Dictionary:
-	var parts := chain.split(".")
-
-	if parts.is_empty():
-		return {"error": true}
-
-	var current: Variant = base
-
-	for i in range(parts.size() - 1):
-		var part := parts[i].strip_edges()
-
-		if part.is_empty():
-			continue
-
-		if part == "@":
-			current = last_value
-			continue
-
-		if part == "~":
-			current = route
-			continue
-
-		current = _get_member(current, part)
-
-		if current is NoResult:
-			return {"error": true}
-
-	return {
-		"parent": current,
-		"leaf": parts[parts.size() - 1].strip_edges()
-	}
-
-
-func _set_member(container: Variant, member: String, value: Variant) -> bool:
-	if container is Dictionary:
-		var dict: Dictionary = container
-		dict[member] = value
+func _set_member(
+	t_container: Variant,
+	t_member: String,
+	t_value: Variant
+) -> bool:
+	if t_container is Dictionary:
+		var t_dict: Dictionary = t_container
+		t_dict[t_member] = t_value
 		return true
 
-	if container is Array:
-		if not member.is_valid_int():
+	if t_container is Array:
+		if not t_member.is_valid_int():
 			return false
 
-		var idx := int(member)
-		var arr: Array = container
+		var t_index := int(t_member)
+		var t_array: Array = t_container
 
-		if idx < 0 or idx >= arr.size():
+		if t_index < 0 or t_index >= t_array.size():
 			return false
 
-		arr[idx] = value
+		t_array[t_index] = t_value
 		return true
 
-	if container is Object:
-		var obj: Object = container
+	if t_container is Object:
+		var t_object: Object = t_container
 
-		if not _has_property(obj, member):
+		if not _has_property(t_object, t_member):
 			return false
 
-		obj.set(member, value)
+		t_object.set(t_member, t_value)
 		return true
 
 	return false
 
-func cmd_vget(args: Array) -> Variant:
-	if args.size() != 1:
-		console_output("[ERROR] Uso: vget [name]")
+
+func _resolve_property_chain(
+	t_base: Variant,
+	t_chain: String
+) -> Variant:
+	var t_current: Variant = t_base
+
+	for t_part in t_chain.split(":"):
+		t_part = t_part.strip_edges()
+
+		if t_part.is_empty():
+			continue
+
+		if t_part == "@":
+			t_current = last_value
+			continue
+
+		t_current = _get_member(t_current, t_part)
+
+		if t_current is NoResult:
+			return t_current
+
+	return t_current
+
+
+func _resolve_property_parent(
+	t_base: Variant,
+	t_chain: String
+) -> Dictionary:
+	var t_parts := t_chain.split(".")
+
+	if t_parts.is_empty():
+		return {"t_error": true}
+
+	var t_current: Variant = t_base
+
+	for t_index in range(t_parts.size() - 1):
+		var t_part := t_parts[t_index].strip_edges()
+
+		if t_part.is_empty():
+			continue
+
+		if t_part == "@":
+			t_current = last_value
+			continue
+
+		t_current = _get_member(t_current, t_part)
+
+		if t_current is NoResult:
+			return {"t_error": true}
+
+	return {
+		"t_parent": t_current,
+		"t_leaf": t_parts[t_parts.size() - 1].strip_edges()
+	}
+
+func _resolve_reference(t_text: String) -> Variant:
+	t_text = _strip_surrounding_quotes(t_text)
+
+	if t_text == "self":
+		return _current_context()
+
+	if variables.has(t_text):
+		return variables[t_text]
+
+	if t_text == "@":
+		return last_value
+
+	# RouteFileManager se encarga de /root, res://, user://,
+	# rutas relativas y cualquier otra ruta externa a la consola.
+	if route_file_manager != null:
+		if route_file_manager.has_method("resolve_reference"):
+			var t_resolved = route_file_manager.call(
+				"resolve_reference",
+				t_text
+			)
+
+			if t_resolved != null:
+				return t_resolved
+
+		if route_file_manager.has_method("resolve"):
+			var t_resolved = route_file_manager.call(
+				"resolve",
+				t_text
+			)
+
+			if t_resolved != null:
+				return t_resolved
+
+	# Si contiene ":" todavía puede ser una subruta de un contexto.
+	if t_text.find(":") != -1:
+		var t_chained = _resolve_property_chain(
+			_current_context(),
+			t_text
+		)
+
+		if not (t_chained is NoResult):
+			return t_chained
+
+	return null
+
+
+func _looks_like_expression(t_text: String) -> bool:
+	if t_text.is_empty():
+		return false
+
+	if t_text.begins_with("\"") and t_text.ends_with("\""):
+		return false
+
+	if (
+		t_text == "null"
+		or t_text == "true"
+		or t_text == "false"
+	):
+		return false
+
+	if t_text == "@":
+		return false
+
+	for t_character in [
+		"+",
+		"-",
+		"*",
+		"/",
+		"%",
+		"(",
+		")",
+		".",
+		",",
+		"[",
+		"]",
+		"{",
+		"}"
+	]:
+		if t_text.find(t_character) != -1:
+			return true
+
+	return false
+
+
+func preprocess_expression(t_text: String) -> String:
+	return t_text.replace("@", "last")
+
+
+func evaluate_expression(t_text: String) -> Variant:
+	var t_expression := Expression.new()
+	var t_parsed_text := preprocess_expression(t_text)
+
+	var t_error := t_expression.parse(t_parsed_text)
+
+	if t_error != OK:
 		return NoResult.new()
 
-	var tname := str(args[0])
+	var t_context := ConsoleContext.new(
+		last_value,
+		_current_context(),
+		variables
+	)
 
-	if not variables.has(tname):
-		console_output("[ERROR] Variable no encontrada: " + tname)
+	var t_result = t_expression.execute([], t_context)
+
+	if t_expression.has_execute_failed():
 		return NoResult.new()
 
-	return variables[tname]
+	return t_result
 
-func cmd_vset(args: Array) -> Variant:
-	if args.size() != 2:
-		console_output("[ERROR] Uso: vset [name] [value]")
+
+func evaluate_raw_expression(t_text: String) -> Variant:
+	var t_expression := Expression.new()
+
+	var t_error := t_expression.parse(t_text)
+
+	if t_error != OK:
 		return NoResult.new()
 
-	var tname := str(args[0])
-	var value: Variant = args[1]
+	var t_result = t_expression.execute(
+		[],
+		ConsoleContext.new(
+			last_value,
+			_current_context(),
+			variables
+		)
+	)
 
-	variables[tname] = value
+	if t_expression.has_execute_failed():
+		return NoResult.new()
+
+	return t_result
+
+
+func parse_value(t_value: String) -> Variant:
+	t_value = t_value.strip_edges()
+
+	if t_value == "@":
+		return last_value
+
+	if (
+		t_value.begins_with("\"")
+		and t_value.ends_with("\"")
+	):
+		return t_value.substr(
+			1,
+			t_value.length() - 2
+		)
+
+	if t_value == "null":
+		return null
+
+	if t_value == "true":
+		return true
+
+	if t_value == "false":
+		return false
+
+	if variables.has(t_value):
+		return variables[t_value]
+
+	if t_value.is_valid_int():
+		return int(t_value)
+
+	if t_value.is_valid_float():
+		return float(t_value)
+
+	if _looks_like_expression(t_value):
+		var t_expression_result = evaluate_expression(t_value)
+
+		if not (t_expression_result is NoResult):
+			return t_expression_result
+
+	return t_value
+
+
+func _parse_argument(
+	t_tokens: PackedStringArray,
+	t_index: int,
+	t_end: int,
+	t_raw: bool
+) -> Dictionary:
+	if t_index >= t_end:
+		return {
+			"value": NoResult.new(),
+			"next_index": t_index
+		}
+
+	if t_raw:
+		return {
+			"value": t_tokens[t_index],
+			"next_index": t_index + 1
+		}
+
+	var t_token := t_tokens[t_index]
+
+	if t_token in commands:
+		return _parse_command_call(
+			t_tokens,
+			t_index,
+			t_end
+		)
+
+	return {
+		"value": parse_value(t_token),
+		"next_index": t_index + 1
+	}
+
+
+func _ready() -> void:
+	var tree : SceneTree = get_tree()
+	variables["tree"] = tree
+
+func _parse_command_call(
+	t_tokens: PackedStringArray,
+	t_index: int,
+	t_end: int
+) -> Dictionary:
+	if t_index >= t_end:
+		return {
+			"value": NoResult.new(),
+			"next_index": t_index
+		}
+
+	var t_token := t_tokens[t_index]
+
+	if not t_token in commands:
+		return {
+			"value": parse_value(t_token),
+			"next_index": t_index + 1
+		}
+
+	var t_command_data: Dictionary = commands[t_token]
+	var t_amount: int = t_command_data["args"]
+	var t_raw: Array = t_command_data.get("raw", [])
+
+	var t_call := TCommandCall.new(t_token)
+
+	# `at <reference> <command...>`
+	if t_token == "at":
+		if t_index + 2 >= t_end:
+			return {
+				"value": NoResult.new(),
+				"next_index": t_end
+			}
+
+		var t_reference = parse_value(
+			t_tokens[t_index + 1]
+		)
+
+		var t_nested := _parse_command_call(
+			t_tokens,
+			t_index + 2,
+			t_end
+		)
+
+		if t_nested["value"] is NoResult:
+			return {
+				"value": NoResult.new(),
+				"next_index": t_end
+			}
+
+		t_call.t_args = [
+			t_reference,
+			t_nested["value"]
+		]
+
+		return {
+			"value": t_call,
+			"next_index": t_nested["next_index"]
+		}
+
+	# `repeat <amount> <command...>`
+	if t_token == "repeat":
+		if t_index + 2 >= t_end:
+			return {
+				"value": NoResult.new(),
+				"next_index": t_end
+			}
+
+		var t_amount_result = parse_value(
+			t_tokens[t_index + 1]
+		)
+
+		var t_nested_repeat := _parse_command_call(
+			t_tokens,
+			t_index + 2,
+			t_end
+		)
+
+		if t_nested_repeat["value"] is NoResult:
+			return {
+				"value": NoResult.new(),
+				"next_index": t_end
+			}
+
+		t_call.t_args = [
+			t_amount_result,
+			t_nested_repeat["value"]
+		]
+
+		return {
+			"value": t_call,
+			"next_index": t_nested_repeat["next_index"]
+		}
+
+	# Comandos con argumentos variables.
+	if t_amount == -1:
+		for t_argument_index in range(
+			t_index + 1,
+			t_end
+		):
+			var t_argument_position := (
+				t_argument_index - t_index - 1
+			)
+
+			if t_argument_position in t_raw:
+				t_call.t_args.append(
+					t_tokens[t_argument_index]
+				)
+			else:
+				t_call.t_args.append(
+					parse_value(
+						t_tokens[t_argument_index]
+					)
+				)
+
+		return {
+			"value": t_call,
+			"next_index": t_end
+		}
+
+	# Comandos con cantidad fija de argumentos.
+	var t_current_index := t_index + 1
+
+	for t_argument_index in range(t_amount):
+		if t_current_index >= t_end:
+			break
+
+		var t_is_raw := t_argument_index in t_raw
+
+		var t_parsed := _parse_argument(
+			t_tokens,
+			t_current_index,
+			t_end,
+			t_is_raw
+		)
+
+		if t_parsed["value"] is NoResult:
+			break
+
+		t_call.t_args.append(
+			t_parsed["value"]
+		)
+
+		t_current_index = t_parsed["next_index"]
+
+	return {
+		"value": t_call,
+		"next_index": t_current_index
+	}
+
+
+func _execute_call(t_call: TCommandCall) -> Variant:
+	if t_call == null:
+		return NoResult.new()
+
+	if not commands.has(t_call.t_name):
+		return NoResult.new()
+
+	var t_command_data: Dictionary = commands[
+		t_call.t_name
+	]
+
+	var t_function: Callable = t_command_data["func"]
+
+	var t_result = t_function.call(
+		t_call.t_args
+	)
+
+	if not (t_result is NoResult):
+		last_value = t_result
+
+	return t_result
+
+
+func parse_command(
+	t_tokens: PackedStringArray,
+	t_index := 0
+) -> Variant:
+	var t_parsed := _parse_command_call(
+		t_tokens,
+		t_index,
+		t_tokens.size()
+	)
+
+	if t_parsed["value"] is NoResult:
+		return NoResult.new()
+
+	var t_call = t_parsed["value"]
+
+	if not t_call is TCommandCall:
+		return t_call
+
+	return _execute_call(t_call)
+
+
+func cmd_vget(t_args: Array) -> Variant:
+	if t_args.size() != 1:
+		console_output(
+			"[ERROR] Uso: vget [name]"
+		)
+		return NoResult.new()
+
+	var t_name := str(t_args[0])
+
+	if not variables.has(t_name):
+		console_output(
+			"[ERROR] Variable no encontrada: "
+			+ t_name
+		)
+		return NoResult.new()
+
+	return variables[t_name]
+
+
+func cmd_vset(t_args: Array) -> Variant:
+	if t_args.size() != 2:
+		console_output(
+			"[ERROR] Uso: vset [name] [value]"
+		)
+		return NoResult.new()
+
+	var t_name := str(t_args[0])
+	var t_value: Variant = t_args[1]
+
+	variables[t_name] = t_value
+
 	return NoResult.new()
 
-func cmd_load(args: Array) -> Variant:
-	if args.size() != 1:
-		console_output("[ERROR] Uso: load [path]")
-		return NoResult.new()
 
-	var path := _strip_surrounding_quotes(str(args[0]))
-	var resource := ResourceLoader.load(path)
-
-	if resource == null:
-		console_output("[ERROR] No se pudo cargar: " + path)
-		return NoResult.new()
-
-	_push_route_state()
-	route = resource
-	resource_path = path
-
-	console_output(path)
-	return resource
-
-
-func cmd_go(args: Array) -> Variant:
-	if args.size() != 1:
-		console_output("[ERROR] Uso: go [property|exit]")
-		return NoResult.new()
-
-	var chain := _strip_surrounding_quotes(str(args[0]))
-
-	if chain == "exit" or chain == "..":
-		if not _pop_route_state():
-			console_output("[ERROR] No hay ruta previa")
-			return NoResult.new()
-
-		if route is Node:
-			console_output((route as Node).get_path())
-		elif resource_path != "":
-			console_output(resource_path)
-		else:
-			console_output(str(route))
-
-		return route
-
-	var base := route
-	var resolved = _resolve_property_chain(base, chain)
-
-	if resolved is NoResult or resolved == null:
-		console_output("[ERROR] Propiedad/ruta no encontrada: " + chain)
-		return NoResult.new()
-
-	_push_route_state()
-	route = resolved
-
-	if resource_path.is_empty():
-		resource_path = chain
-	else:
-		resource_path = resource_path + "." + chain
-
-	console_output(resource_path)
-	return route
-
-func cmd_log(args: Array) -> Variant:
-	if args.size() > 0:
-		console_output(args[0])
+func cmd_log(t_args: Array) -> Variant:
+	if not t_args.is_empty():
+		console_output(t_args[0])
 
 	return NoResult.new()
 
 
-func cmd_new(args: Array) -> Variant:
-	if args.is_empty():
-		console_output("[ERROR] Uso: new [expression]")
+func cmd_new(t_args: Array) -> Variant:
+	if t_args.is_empty():
+		console_output(
+			"[ERROR] Uso: new [expression]"
+		)
 		return NoResult.new()
 
-	var expression := " ".join(args)
-	var result = evaluate_raw_expression(expression)
+	var t_expression := " ".join(t_args)
+	var t_result = evaluate_raw_expression(
+		t_expression
+	)
 
-	if not (result is NoResult):
-		return result
+	if not (t_result is NoResult):
+		return t_result
 
-	var type_name := str(args[0])
+	var t_type_name := str(t_args[0])
 
-	if ClassDB.class_exists(type_name):
-		if not ClassDB.can_instantiate(type_name):
+	if ClassDB.class_exists(t_type_name):
+		if not ClassDB.can_instantiate(t_type_name):
 			console_output(
-				"[ERROR] La clase no puede ser instanciada: " + type_name
+				"[ERROR] La clase no puede ser instanciada: "
+				+ t_type_name
 			)
 			return NoResult.new()
 
-		return ClassDB.instantiate(type_name)
+		return ClassDB.instantiate(t_type_name)
 
-	console_output("[ERROR] No se pudo crear: " + expression)
+	console_output(
+		"[ERROR] No se pudo crear: "
+		+ t_expression
+	)
+
 	return NoResult.new()
 
 
-func cmd_repeat(args: Array) -> Variant:
-	if args.size() != 2:
-		console_output("[ERROR] Uso: repeat [amount] [command]")
+func cmd_get(t_args: Array) -> Variant:
+	var t_target: Variant
+	var t_property: String
+
+	if t_args.size() == 1:
+		t_target = _current_context()
+		t_property = str(t_args[0])
+
+	elif t_args.size() == 2:
+		t_target = _resolve_reference(
+			str(t_args[0])
+		)
+		t_property = str(t_args[1])
+
+	else:
+		console_output(
+			"[ERROR] Uso: get [route] [value]"
+		)
 		return NoResult.new()
 
-	var amount = args[0]
-
-	if not (amount is int):
-		console_output("[ERROR] La cantidad debe ser un entero")
+	if t_target == null or t_target is NoResult:
+		console_output(
+			"[ERROR] Referencia inválida"
+		)
 		return NoResult.new()
 
-	if amount < 0:
-		console_output("[ERROR] La cantidad no puede ser negativa")
+	var t_result = _resolve_property_chain(
+		t_target,
+		t_property
+	)
+
+	if t_result is NoResult:
+		console_output(
+			"[ERROR] Propiedad no encontrada: "
+			+ t_property
+		)
 		return NoResult.new()
 
-	var command := str(args[1])
+	return t_result
 
-	if command.strip_edges() == "":
-		console_output("[ERROR] Comando vacío")
+
+func cmd_set(t_args: Array) -> Variant:
+	var t_target: Variant
+	var t_property: String
+	var t_value: Variant
+
+	if t_args.size() == 2:
+		t_target = _current_context()
+		t_property = str(t_args[0])
+		t_value = t_args[1]
+
+	elif t_args.size() == 3:
+		t_target = _resolve_reference(
+			str(t_args[0])
+		)
+		t_property = str(t_args[1])
+		t_value = t_args[2]
+
+	else:
+		console_output(
+			"[ERROR] Uso: set [route] [value] [data]"
+		)
 		return NoResult.new()
 
-	var final_result: Variant = NoResult.new()
+	if t_target == null or t_target is NoResult:
+		console_output(
+			"[ERROR] Referencia inválida"
+		)
+		return NoResult.new()
 
-	for i in range(amount):
-		var tokens := tokenize(command)
+	var t_endpoint := _resolve_property_parent(
+		t_target,
+		t_property
+	)
 
-		if tokens.is_empty():
-			continue
+	if t_endpoint.has("t_error"):
+		console_output(
+			"[ERROR] Propiedad no encontrada: "
+			+ t_property
+		)
+		return NoResult.new()
 
-		var result = parse_command(tokens)
+	var t_parent: Variant = t_endpoint["t_parent"]
+	var t_leaf := str(t_endpoint["t_leaf"])
 
-		if not (result is NoResult):
-			last_value = result
-			final_result = result
+	if not _set_member(
+		t_parent,
+		t_leaf,
+		t_value
+	):
+		console_output(
+			"[ERROR] No se pudo asignar: "
+			+ t_property
+		)
+		return NoResult.new()
 
-	return final_result
+	return NoResult.new()
+
+
+func cmd_call(t_args: Array) -> Variant:
+	if t_args.is_empty():
+		console_output(
+			"[ERROR] Uso: call [route] [method] [parameters]"
+		)
+		return NoResult.new()
+
+	var t_target: Variant = _current_context()
+	var t_method_index := 0
+
+	if t_args.size() >= 2:
+		var t_first := str(t_args[0])
+
+		if (
+			t_target is Object
+			and t_target.has_method(t_first)
+		):
+			t_method_index = 0
+		else:
+			var t_resolved = _resolve_reference(
+				t_first
+			)
+
+			if (
+				t_resolved != null
+				and t_resolved is Object
+			):
+				t_target = t_resolved
+				t_method_index = 1
+
+	if (
+		t_target == null
+		or not t_target is Object
+	):
+		console_output(
+			"[ERROR] Referencia inválida"
+		)
+		return NoResult.new()
+
+	var t_method := str(
+		t_args[t_method_index]
+	)
+
+	if not t_target.has_method(t_method):
+		console_output(
+			"[ERROR] Método no encontrado: "
+			+ t_method
+		)
+		return NoResult.new()
+
+	var t_parameters: Array = []
+
+	for t_index in range(
+		t_method_index + 1,
+		t_args.size()
+	):
+		t_parameters.append(
+			t_args[t_index]
+		)
+
+	return t_target.callv(
+		t_method,
+		t_parameters
+	)
+
+
+func cmd_emit(t_args: Array) -> Variant:
+	if t_args.is_empty():
+		console_output(
+			"[ERROR] Uso: emit [route] [signal] [parameters]"
+		)
+		return NoResult.new()
+
+	var t_target: Variant = _current_context()
+	var t_signal_index := 0
+
+	if t_args.size() >= 2:
+		var t_first := str(t_args[0])
+
+		if (
+			t_target is Object
+			and t_target.has_signal(t_first)
+		):
+			t_signal_index = 0
+		else:
+			var t_resolved = _resolve_reference(
+				t_first
+			)
+
+			if (
+				t_resolved != null
+				and t_resolved is Object
+			):
+				t_target = t_resolved
+				t_signal_index = 1
+
+	if (
+		t_target == null
+		or not t_target is Object
+	):
+		console_output(
+			"[ERROR] Referencia inválida"
+		)
+		return NoResult.new()
+
+	var t_signal_name := str(
+		t_args[t_signal_index]
+	)
+
+	if not t_target.has_signal(t_signal_name):
+		console_output(
+			"[ERROR] Señal no encontrada: "
+			+ t_signal_name
+		)
+		return NoResult.new()
+
+	var t_parameters: Array = []
+
+	for t_index in range(
+		t_signal_index + 1,
+		t_args.size()
+	):
+		t_parameters.append(
+			t_args[t_index]
+		)
+
+	t_target.callv(
+		"emit_signal",
+		[t_signal_name] + t_parameters
+	)
+
+	return NoResult.new()
+
+func cmd_load(t_args : Array) -> Variant:
+	return route_file_manager.execute_load(t_args)
+
+func cmd_cd(args: Array) -> Variant:
+	return route_file_manager.execute_cd(args)
 
 
 func cmd_ls(args: Array) -> Variant:
-	if not (route is Node):
-		console_output("[ERROR] Route actual no es un Node")
+	return route_file_manager.execute_ls(args)
+
+
+func cmd_pwd(args: Array) -> Variant:
+	return route_file_manager.execute_pwd(args)
+
+
+func cmd_at(t_args: Array) -> Variant:
+	if t_args.size() != 2:
+		console_output(
+			"[ERROR] Uso: at [reference] [command]"
+		)
 		return NoResult.new()
 
-	var node := route as Node
+	var t_target: Variant = t_args[0]
+	var t_nested = t_args[1]
 
-	if args.is_empty():
-		var children := node.get_children()
+	if t_target is String:
+		t_target = _resolve_reference(
+			t_target
+		)
 
-		for child in children:
-			console_output(child.name)
-
-		return children
-
-	if str(args[0]) == "props":
-		var list := []
-
-		for p in node.get_property_list():
-			list.append(p["name"])
-			console_output(p["name"])
-
-		return list
-
-	return NoResult.new()
-
-func cmd_cd(args: Array) -> Variant:
-	if args.is_empty():
-		return route
-
-	var target_text := _strip_surrounding_quotes(str(args[0]))
-
-	var target: Object
-	if target_text == "self":
-		target = node_route
-	else:
-		target = resolve_route(target_text)
-
-	if target == null or not (target is Node):
-		console_output("[ERROR] Nodo no encontrado")
+	if (
+		t_target == null
+		or t_target is NoResult
+	):
+		console_output(
+			"[ERROR] Referencia inválida"
+		)
 		return NoResult.new()
 
-	_push_route_state()
-	node_route = target
-	route = target
-	resource_path = ""
-
-	console_output((target as Node).get_path())
-	return target
-
-func cmd_pwd(_args: Array) -> Variant:
-	if route is Node:
-		var r := (route as Node).get_path()
-
-		console_output(r)
-		return r
-
-	console_output("[ERROR] Route actual no es un Node")
-	return NoResult.new()
-
-func cmd_get(args: Array) -> Variant:
-	var target: Variant
-	var property: String
-
-	if args.size() == 1:
-		target = route
-		property = str(args[0])
-
-	elif args.size() == 2:
-		target = _resolve_reference(str(args[0]))
-		property = str(args[1])
-
-	else:
-		console_output("[ERROR] Uso: get [route] [value]")
+	if not t_nested is TCommandCall:
+		console_output(
+			"[ERROR] Se esperaba un comando"
+		)
 		return NoResult.new()
 
-	if target == null or target is NoResult:
-		console_output("[ERROR] Route inválido")
+	_push_context(t_target)
+
+	var t_result = _execute_call(t_nested)
+
+	_pop_context()
+
+	return t_result
+
+
+func cmd_repeat(t_args: Array) -> Variant:
+	if t_args.size() != 2:
+		console_output(
+			"[ERROR] Uso: repeat [amount] [command]"
+		)
 		return NoResult.new()
 
-	var result = _resolve_property_chain(target, property)
+	var t_amount: Variant = t_args[0]
+	var t_nested = t_args[1]
 
-	if result is NoResult:
-		console_output("[ERROR] Propiedad no encontrada: " + property)
+	if not t_amount is int:
+		console_output(
+			"[ERROR] La cantidad debe ser un entero"
+		)
 		return NoResult.new()
 
-	return result
-
-
-func cmd_set(args: Array) -> Variant:
-	var target: Variant
-	var property: String
-	var value: Variant
-
-	if args.size() == 2:
-		target = route
-		property = str(args[0])
-		value = args[1]
-
-	elif args.size() == 3:
-		target = _resolve_reference(str(args[0]))
-		property = str(args[1])
-		value = args[2]
-
-	else:
-		console_output("[ERROR] Uso: set [route] [value] [data]")
+	if t_amount < 0:
+		console_output(
+			"[ERROR] La cantidad no puede ser negativa"
+		)
 		return NoResult.new()
 
-	if target == null or target is NoResult:
-		console_output("[ERROR] Route inválido")
+	if not t_nested is TCommandCall:
+		console_output(
+			"[ERROR] Se esperaba un comando"
+		)
 		return NoResult.new()
 
-	var endpoint := _resolve_property_parent(target, property)
+	var t_final_result: Variant = NoResult.new()
 
-	if endpoint.has("error"):
-		console_output("[ERROR] Propiedad no encontrada: " + property)
-		return NoResult.new()
+	for _t_i in range(t_amount):
+		var t_result = _execute_call(t_nested)
 
-	var parent = endpoint["parent"]
-	var leaf: String = str(endpoint["leaf"])
+		if not (t_result is NoResult):
+			t_final_result = t_result
 
-	if not _set_member(parent, leaf, value):
-		console_output("[ERROR] No se pudo asignar: " + property)
-		return NoResult.new()
+	return t_final_result
 
-	return NoResult.new()
-
-
-func cmd_call(args: Array) -> Variant:
-	if args.size() < 1:
-		console_output("[ERROR] Uso: call [route] [method] [parameters]")
-		return NoResult.new()
-
-	var target: Object = route
-	var method_index := 0
-
-	if args.size() >= 2:
-		var first := str(args[0])
-
-		if route != null and route.has_method(first):
-			target = route
-			method_index = 0
-		else:
-			var resolved = _resolve_reference(first)
-			if resolved != null and resolved is Object:
-				target = resolved
-				method_index = 1
-			else:
-				target = route
-				method_index = 0
-
-	var method := str(args[method_index])
-
-	if target == null:
-		console_output("[ERROR] Route inválido")
-		return NoResult.new()
-
-	if not target.has_method(method):
-		console_output("[ERROR] Método no encontrado: " + method)
-		return NoResult.new()
-
-	var parameters: Array = []
-	for i in range(method_index + 1, args.size()):
-		parameters.append(args[i])
-
-	return target.callv(method, parameters)
-
-
-func cmd_emit(args: Array) -> Variant:
-	if args.size() < 1:
-		console_output("[ERROR] Uso: emit [route] [signal] [parameters]")
-		return NoResult.new()
-
-	var target: Object = route
-	var signal_index := 0
-
-	if args.size() >= 2:
-		var first := str(args[0])
-
-		if route != null and route.has_signal(first):
-			target = route
-			signal_index = 0
-		else:
-			var resolved = _resolve_reference(first)
-			if resolved != null and resolved is Object:
-				target = resolved
-				signal_index = 1
-			else:
-				target = route
-				signal_index = 0
-
-	var signal_name := str(args[signal_index])
-
-	if target == null:
-		console_output("[ERROR] Route inválido")
-		return NoResult.new()
-
-	if not target.has_signal(signal_name):
-		console_output("[ERROR] Señal no encontrada: " + signal_name)
-		return NoResult.new()
-
-	var parameters: Array = []
-	for i in range(signal_index + 1, args.size()):
-		parameters.append(args[i])
-
-	target.callv("emit_signal", [signal_name] + parameters)
-	return NoResult.new()
 
 var commands := {
 	"log": {
@@ -599,19 +1064,6 @@ var commands := {
 		"args": -1,
 		"raw": [0, 1]
 	},
-	"pwd": {
-		"func": cmd_pwd,
-		"args": 0
-	},
-	"cd": {
-		"func": cmd_cd,
-		"args": 1,
-		"raw": [0]
-	},
-	"ls": {
-		"func": cmd_ls,
-		"args": -1
-	},
 	"vget": {
 		"func": cmd_vget,
 		"args": 1,
@@ -622,324 +1074,110 @@ var commands := {
 		"args": 2,
 		"raw": [0]
 	},
+	"load": {
+		"func": cmd_load,
+		"args": 1
+	},
 	"new": {
 		"func": cmd_new,
 		"args": -1
 	},
-	"load": {
-		"func": cmd_load,
-		"args": 1,
-		"raw": [0]
-	},
-	"go": {
-		"func": cmd_go,
-		"args": 1,
-		"raw": [0]
+	"at": {
+		"func": cmd_at,
+		"args": 2,
+		"raw": []
 	},
 	"repeat": {
-		"func" : cmd_repeat,
-		"args" : 2,
-		"raw" : []
+		"func": cmd_repeat,
+		"args": 2,
+		"raw": []
 	}
 }
 
 
-func preprocess_expression(text: String) -> String:
-	text = text.replace("@", "last")
-	text = text.replace("~", "current")
-
-	return text
-
-
-func _looks_like_expression(text: String) -> bool:
-	if text == "":
-		return false
-
-	if text.begins_with("\"") and text.ends_with("\""):
-		return false
-
-	if text == "null" or text == "true" or text == "false":
-		return false
-
-	if text == "@" or text == "~":
-		return false
-
-	for ch in [
-		"+",
-		"-",
-		"*",
-		"/",
-		"%",
-		"(",
-		")",
-		".",
-		",",
-		"[",
-		"]",
-		"{",
-		"}"
-	]:
-		if text.find(ch) != -1:
-			return true
-
-	return false
-
-
-func evaluate_expression(text: String) -> Variant:
-	var expression := Expression.new()
-	var parsed_text := preprocess_expression(text)
-
-	var error := expression.parse(parsed_text)
-
-	if error != OK:
-		return NoResult.new()
-
-	var context := ConsoleContext.new(
-		last_value,
-		route,
-		variables
-	)
-
-	var result = expression.execute([], context)
-
-	if expression.has_execute_failed():
-		return NoResult.new()
-
-	return result
-
-
-func parse_value(value: String) -> Variant:
-	value = value.strip_edges()
-
-	if value == "@":
-		return last_value
-
-	if value == "~":
-		return route
-
-	if value.begins_with("\"") and value.ends_with("\""):
-		return value.substr(1, value.length() - 2)
-
-	if value == "null":
-		return null
-
-	if value == "true":
-		return true
-
-	if value == "false":
-		return false
-
-	if value in variables:
-		return variables[value]
-
-	if value.is_valid_int():
-		return int(value)
-
-	if value.is_valid_float():
-		return float(value)
-
-	if _looks_like_expression(value):
-		var expr_result = evaluate_expression(value)
-
-		if not (expr_result is NoResult):
-			return expr_result
-
-	return value
-
-
-func evaluate_raw_expression(text: String) -> Variant:
-	var expression := Expression.new()
-
-	var error := expression.parse(text)
-
-	if error != OK:
-		return NoResult.new()
-
-	var result = expression.execute(
-		[],
-		ConsoleContext.new(
-			last_value,
-			route,
-			variables
-		)
-	)
-
-	if expression.has_execute_failed():
-		return NoResult.new()
-
-	return result
-
-func parse_command(tokens: PackedStringArray, index := 0) -> Variant:
-	if index >= tokens.size():
-		return NoResult.new()
-
-	var token := tokens[index]
-
-	if token in commands:
-		var command_data: Dictionary = commands[token]
-		var args: Array = []
-
-		var amount: int = command_data["args"]
-		var raw: Array = command_data.get("raw", [])
-
-		if amount == -1:
-			for i in range(index + 1, tokens.size()):
-				var argument_index := i - index - 1
-
-				if argument_index in raw:
-					args.append(tokens[i])
-				else:
-					args.append(parse_value(tokens[i]))
-
-		else:
-			for i in range(amount):
-				var arg_index := index + 1 + i
-
-				if arg_index >= tokens.size():
-					break
-
-				if i in raw:
-					args.append(tokens[arg_index])
-				else:
-					var result = parse_command(tokens, arg_index)
-
-					if not (result is NoResult):
-						args.append(result)
-
-					index += count_tokens(tokens, arg_index)
-
-		return command_data["func"].call(args)
-
-	return parse_value(token)
-
-
-func count_tokens(tokens: PackedStringArray, index: int) -> int:
-	if index >= tokens.size():
-		return 1
-
-	var token := tokens[index]
-
-	if token in commands:
-		var command_data: Dictionary = commands[token]
-		var amount: int = command_data["args"]
-		var raw: Array = command_data.get("raw", [])
-
-		if amount == -1:
-			return tokens.size() - index
-
-		var consumed := 1
-
-		for i in range(amount):
-			var arg_index := index + consumed
-
-			if arg_index >= tokens.size():
-				break
-
-			if i in raw:
-				consumed += 1
-			else:
-				consumed += count_tokens(tokens, arg_index)
-
-		return consumed
-
-	return 1
-
-func tokenize(text: String) -> PackedStringArray:
-	var tokens: PackedStringArray = []
-
-	var current := ""
-	var quote := false
-	var parentheses := 0
-	var brackets := 0
-	var braces := 0
-
-	for c in text:
-		match c:
+func tokenize(t_text: String) -> PackedStringArray:
+	var t_tokens := PackedStringArray()
+
+	var t_current := ""
+	var t_quote := false
+	var t_parentheses := 0
+	var t_brackets := 0
+	var t_braces := 0
+
+	for t_character in t_text:
+		match t_character:
 			"\"":
-				quote = not quote
-				current += c
+				t_quote = not t_quote
+				t_current += t_character
 
 			"(":
-				parentheses += 1
-				current += c
+				t_parentheses += 1
+				t_current += t_character
 
 			")":
-				parentheses -= 1
-				current += c
+				t_parentheses -= 1
+				t_current += t_character
 
 			"[":
-				brackets += 1
-				current += c
+				t_brackets += 1
+				t_current += t_character
 
 			"]":
-				brackets -= 1
-				current += c
+				t_brackets -= 1
+				t_current += t_character
 
 			"{":
-				braces += 1
-				current += c
+				t_braces += 1
+				t_current += t_character
 
 			"}":
-				braces -= 1
-				current += c
+				t_braces -= 1
+				t_current += t_character
 
 			" ":
 				if (
-					not quote
-					and parentheses == 0
-					and brackets == 0
-					and braces == 0
+					not t_quote
+					and t_parentheses == 0
+					and t_brackets == 0
+					and t_braces == 0
 				):
-					if current != "":
-						tokens.append(current)
-						current = ""
+					if not t_current.is_empty():
+						t_tokens.append(t_current)
+						t_current = ""
 				else:
-					current += c
+					t_current += t_character
 
 			_:
-				current += c
+				t_current += t_character
 
-	if current != "":
-		tokens.append(current)
+	if not t_current.is_empty():
+		t_tokens.append(t_current)
 
-	return tokens
+	return t_tokens
 
 
-func execute(command: String) -> int:
-	command = command.replace(";", "\n")
+func execute(t_command: String) -> int:
+	t_command = t_command.replace(";", "\n")
 
-	var commands_text := command.split("\n")
+	var t_command_lines := t_command.split("\n")
 
-	if commands_text.is_empty():
+	if t_command_lines.is_empty():
 		return 1
 
-	for line in commands_text:
-		var text := line.strip_edges()
+	for t_line in t_command_lines:
+		var t_text := t_line.strip_edges()
 
-		if text.is_empty():
+		if t_text.is_empty():
 			continue
 
-		var tokens := tokenize(text)
+		var t_tokens := tokenize(t_text)
 
-		if tokens.is_empty():
+		if t_tokens.is_empty():
 			continue
 
-		var result = parse_command(tokens)
+		var t_result = parse_command(t_tokens)
 
-		if not (result is NoResult):
-			last_value = result
+		if not (t_result is NoResult):
+			last_value = t_result
 
 	return 0
-
-class ConsoleContext:
-	var last: Variant
-	var current: Variant
-	var variables: Dictionary
-
-	func _init(_last, _current, _variables):
-		last = _last
-		current = _current
-		variables = _variables
-
-class NoResult:
-	pass

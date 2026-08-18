@@ -1,8 +1,9 @@
 extends Item
-class_name Bread
+class_name Consumable
+
 
 func action_on() -> void:
-	pass
+	queue_free()
 
 func _process(_delta: float) -> void:
 	_update_item()

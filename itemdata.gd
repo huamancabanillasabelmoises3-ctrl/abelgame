@@ -1,3 +1,4 @@
+@icon("res://itemdata_icon.svg")
 extends Resource
 class_name ItemData
 

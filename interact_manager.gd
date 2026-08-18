@@ -1,3 +1,4 @@
+@icon("res://interactmanager.svg")
 extends Node
 class_name InteractManager
 

@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<svg
+	version="1.1"
+	xmlns="http://www.w3.org/2000/svg"
+	xmlns:xlink="http://www.w3.org/1999/xlink"
+	x="0%" y="0%"
+	width="100%" height="100%"
+	viewBox="0 0 24.0 24.0"
+	enable-background="new 0 0 24.0 24.0"
+	xml:space="preserve">
+	<path
+		fill="#FFFFFF"
+		stroke="#000000"
+		fill-opacity="1.000"
+		stroke-opacity="1.000"
+		fill-rule="nonzero"
+		stroke-width="0.0"
+		stroke-linejoin="miter"
+		stroke-linecap="square"
+		d="M13.50,2.25L22.50,2.25L22.50,11.25L13.50,11.25z"/>
+	<path
+		fill="#FFFFFF"
+		stroke="#000000"
+		fill-opacity="1.000"
+		stroke-opacity="1.000"
+		fill-rule="nonzero"
+		stroke-width="0.0"
+		stroke-linejoin="miter"
+		stroke-linecap="square"
+		d="M13.50,12.75L22.50,12.75L22.50,21.75L13.50,21.75z"/>
+	<path
+		fill="#FFFFFF"
+		stroke="#000000"
+		fill-opacity="1.000"
+		stroke-opacity="1.000"
+		fill-rule="nonzero"
+		stroke-width="0.0"
+		stroke-linejoin="miter"
+		stroke-linecap="square"
+		d="M12.00,9.00L10.50,9.00Q10.50,6.00,7.50,6.00Q4.50,6.00,4.50,9.00Q4.50,10.50,7.50,12.00Q12.00,13.50,12.00,16.50Q12.00,21.00,7.50,21.00Q3.00,21.00,3.00,16.50L4.50,16.50Q4.50,19.50,7.50,19.50Q10.50,19.50,10.50,16.50Q10.50,15.00,7.50,13.50Q3.00,12.00,3.00,9.00Q3.00,4.50,7.50,4.50Q12.00,4.50,12.00,9.00z"/>
+	<path
+		fill="#FFFFFF"
+		stroke="#000000"
+		fill-opacity="1.000"
+		stroke-opacity="1.000"
+		fill-rule="nonzero"
+		stroke-width="0.0"
+		stroke-linejoin="miter"
+		stroke-linecap="square"
+		d="M6.75,3.00L8.25,3.00L8.25,22.50L6.75,22.50z"/>
+</svg>

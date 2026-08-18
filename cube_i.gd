@@ -14,5 +14,3 @@ func interact(hit: Dictionary) -> void:
 		dir * impulse_strength,
 		event_position - parent_object.global_position
 	)
-
-	print("Fui empujado")
